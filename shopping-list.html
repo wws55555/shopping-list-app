@@ -1,0 +1,320 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>쇼핑 리스트</title>
+  <style>
+    * {
+      box-sizing: border-box;
+      margin: 0;
+      padding: 0;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f0f4f8;
+      min-height: 100vh;
+      display: flex;
+      justify-content: center;
+      padding: 40px 16px;
+    }
+
+    .container {
+      width: 100%;
+      max-width: 480px;
+    }
+
+    h1 {
+      font-size: 1.75rem;
+      font-weight: 700;
+      color: #1a202c;
+      margin-bottom: 8px;
+    }
+
+    .subtitle {
+      font-size: 0.875rem;
+      color: #718096;
+      margin-bottom: 24px;
+    }
+
+    .input-row {
+      display: flex;
+      gap: 8px;
+      margin-bottom: 24px;
+    }
+
+    .input-row input {
+      flex: 1;
+      padding: 12px 16px;
+      border: 2px solid #e2e8f0;
+      border-radius: 12px;
+      font-size: 1rem;
+      outline: none;
+      transition: border-color 0.15s;
+      background: #fff;
+    }
+
+    .input-row input:focus {
+      border-color: #4f46e5;
+    }
+
+    .input-row button {
+      padding: 12px 20px;
+      background: #4f46e5;
+      color: #fff;
+      border: none;
+      border-radius: 12px;
+      font-size: 1rem;
+      font-weight: 600;
+      cursor: pointer;
+      transition: background 0.15s;
+      white-space: nowrap;
+    }
+
+    .input-row button:hover {
+      background: #4338ca;
+    }
+
+    .stats {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 12px;
+      padding: 0 4px;
+    }
+
+    .stats span {
+      font-size: 0.875rem;
+      color: #718096;
+    }
+
+    .clear-btn {
+      font-size: 0.8rem;
+      color: #e53e3e;
+      background: none;
+      border: none;
+      cursor: pointer;
+      padding: 4px 8px;
+      border-radius: 6px;
+      transition: background 0.15s;
+    }
+
+    .clear-btn:hover {
+      background: #fff5f5;
+    }
+
+    .list {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .empty {
+      text-align: center;
+      color: #a0aec0;
+      padding: 48px 0;
+      font-size: 0.95rem;
+    }
+
+    .empty span {
+      display: block;
+      font-size: 2.5rem;
+      margin-bottom: 12px;
+    }
+
+    .item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      background: #fff;
+      border-radius: 12px;
+      padding: 14px 16px;
+      box-shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
+      transition: opacity 0.2s;
+      animation: slideIn 0.2s ease;
+    }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to   { opacity: 1; transform: translateY(0); }
+    }
+
+    .item.checked {
+      opacity: 0.5;
+    }
+
+    .item input[type="checkbox"] {
+      width: 20px;
+      height: 20px;
+      accent-color: #4f46e5;
+      cursor: pointer;
+      flex-shrink: 0;
+    }
+
+    .item-text {
+      flex: 1;
+      font-size: 1rem;
+      color: #2d3748;
+      word-break: break-all;
+      transition: text-decoration 0.15s;
+    }
+
+    .item.checked .item-text {
+      text-decoration: line-through;
+      color: #a0aec0;
+    }
+
+    .delete-btn {
+      background: none;
+      border: none;
+      cursor: pointer;
+      color: #cbd5e0;
+      font-size: 1.1rem;
+      padding: 4px 6px;
+      border-radius: 6px;
+      transition: color 0.15s, background 0.15s;
+      line-height: 1;
+      flex-shrink: 0;
+    }
+
+    .delete-btn:hover {
+      color: #e53e3e;
+      background: #fff5f5;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <h1>🛒 쇼핑 리스트</h1>
+    <p class="subtitle" id="subtitle">0개 항목</p>
+
+    <div class="input-row">
+      <input id="itemInput" type="text" placeholder="항목 입력..." />
+      <button onclick="addItem()">추가</button>
+    </div>
+
+    <div class="stats">
+      <span id="checkedCount"></span>
+      <button class="clear-btn" onclick="clearChecked()">완료 항목 삭제</button>
+    </div>
+
+    <ul class="list" id="list"></ul>
+  </div>
+
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const SUPABASE_URL = 'https://edtksyezvnbmpughxced.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_WQffdbphegM9bkyWrP6x_Q_yRuLX5nk';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let items = [];
+
+    const listEl = document.getElementById('list');
+    const inputEl = document.getElementById('itemInput');
+
+    async function loadItems() {
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error) {
+        items = data;
+        render();
+      }
+    }
+
+    function render() {
+      listEl.innerHTML = '';
+
+      if (items.length === 0) {
+        listEl.innerHTML = '<div class="empty"><span>🛍️</span>항목을 추가해 보세요!</div>';
+      } else {
+        items.forEach(item => {
+          const li = document.createElement('li');
+          li.className = 'item' + (item.checked ? ' checked' : '');
+          li.innerHTML = `
+            <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="window._toggle('${item.id}')" />
+            <span class="item-text">${escapeHtml(item.text)}</span>
+            <button class="delete-btn" onclick="window._remove('${item.id}')" title="삭제">✕</button>
+          `;
+          listEl.appendChild(li);
+        });
+      }
+
+      const total = items.length;
+      const checked = items.filter(i => i.checked).length;
+      document.getElementById('subtitle').textContent = `${total}개 항목`;
+      document.getElementById('checkedCount').textContent =
+        total ? `${checked} / ${total} 완료` : '';
+    }
+
+    async function addItem() {
+      const text = inputEl.value.trim();
+      if (!text) { inputEl.focus(); return; }
+      inputEl.value = '';
+      inputEl.focus();
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .insert({ text, checked: false })
+        .select()
+        .single();
+      if (!error) {
+        items.unshift(data);
+        render();
+      }
+    }
+
+    async function toggle(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      const { error } = await supabase
+        .from('shopping_items')
+        .update({ checked: !item.checked })
+        .eq('id', id);
+      if (!error) {
+        item.checked = !item.checked;
+        render();
+      }
+    }
+
+    async function remove(id) {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        items = items.filter(i => i.id !== id);
+        render();
+      }
+    }
+
+    async function clearChecked() {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('checked', true);
+      if (!error) {
+        items = items.filter(i => !i.checked);
+        render();
+      }
+    }
+
+    function escapeHtml(text) {
+      return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+    }
+
+    window._toggle = toggle;
+    window._remove = remove;
+    window.addItem = addItem;
+    window.clearChecked = clearChecked;
+
+    inputEl.addEventListener('keydown', e => {
+      if (e.key === 'Enter') addItem();
+    });
+
+    loadItems();
+  </script>
+</body>
+</html>

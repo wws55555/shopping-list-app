@@ -202,14 +202,27 @@
     <ul class="list" id="list"></ul>
   </div>
 
-  <script>
-    let items = JSON.parse(localStorage.getItem('shopping-items') || '[]');
+  <script type="module">
+    import { createClient } from 'https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/+esm';
+
+    const SUPABASE_URL = 'https://edtksyezvnbmpughxced.supabase.co';
+    const SUPABASE_KEY = 'sb_publishable_WQffdbphegM9bkyWrP6x_Q_yRuLX5nk';
+    const supabase = createClient(SUPABASE_URL, SUPABASE_KEY);
+
+    let items = [];
 
     const listEl = document.getElementById('list');
     const inputEl = document.getElementById('itemInput');
 
-    function save() {
-      localStorage.setItem('shopping-items', JSON.stringify(items));
+    async function loadItems() {
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .select('*')
+        .order('created_at', { ascending: false });
+      if (!error) {
+        items = data;
+        render();
+      }
     }
 
     function render() {
@@ -218,13 +231,13 @@
       if (items.length === 0) {
         listEl.innerHTML = '<div class="empty"><span>🛍️</span>항목을 추가해 보세요!</div>';
       } else {
-        items.forEach((item, i) => {
+        items.forEach(item => {
           const li = document.createElement('li');
           li.className = 'item' + (item.checked ? ' checked' : '');
           li.innerHTML = `
-            <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="toggle(${i})" />
+            <input type="checkbox" ${item.checked ? 'checked' : ''} onchange="window._toggle('${item.id}')" />
             <span class="item-text">${escapeHtml(item.text)}</span>
-            <button class="delete-btn" onclick="remove(${i})" title="삭제">✕</button>
+            <button class="delete-btn" onclick="window._remove('${item.id}')" title="삭제">✕</button>
           `;
           listEl.appendChild(li);
         });
@@ -237,43 +250,71 @@
         total ? `${checked} / ${total} 완료` : '';
     }
 
-    function addItem() {
+    async function addItem() {
       const text = inputEl.value.trim();
       if (!text) { inputEl.focus(); return; }
-      items.unshift({ text, checked: false });
       inputEl.value = '';
       inputEl.focus();
-      save();
-      render();
+      const { data, error } = await supabase
+        .from('shopping_items')
+        .insert({ text, checked: false })
+        .select()
+        .single();
+      if (!error) {
+        items.unshift(data);
+        render();
+      }
     }
 
-    function toggle(i) {
-      items[i].checked = !items[i].checked;
-      save();
-      render();
+    async function toggle(id) {
+      const item = items.find(i => i.id === id);
+      if (!item) return;
+      const { error } = await supabase
+        .from('shopping_items')
+        .update({ checked: !item.checked })
+        .eq('id', id);
+      if (!error) {
+        item.checked = !item.checked;
+        render();
+      }
     }
 
-    function remove(i) {
-      items.splice(i, 1);
-      save();
-      render();
+    async function remove(id) {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('id', id);
+      if (!error) {
+        items = items.filter(i => i.id !== id);
+        render();
+      }
     }
 
-    function clearChecked() {
-      items = items.filter(i => !i.checked);
-      save();
-      render();
+    async function clearChecked() {
+      const { error } = await supabase
+        .from('shopping_items')
+        .delete()
+        .eq('checked', true);
+      if (!error) {
+        items = items.filter(i => !i.checked);
+        render();
+      }
     }
 
     function escapeHtml(text) {
       return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
     }
 
+    window._toggle = toggle;
+    window._remove = remove;
+    window.addItem = addItem;
+    window.clearChecked = clearChecked;
+
     inputEl.addEventListener('keydown', e => {
       if (e.key === 'Enter') addItem();
     });
 
-    render();
+    loadItems();
   </script>
 </body>
 </html>
